@@ -1,0 +1,21 @@
+{
+  "id": "artificial-pcb-1",
+  "inspection_rules": "Artificial fixture only; no customer standard.",
+  "images": [
+    {
+      "id": "target",
+      "role": "inspection",
+      "path": "donor.png"
+    },
+    {
+      "id": "reference",
+      "role": "reference",
+      "path": "normal.png"
+    }
+  ],
+  "original_annotations": {
+    "verdict": "normal",
+    "findings": [],
+    "note": "artificial original label"
+  }
+}

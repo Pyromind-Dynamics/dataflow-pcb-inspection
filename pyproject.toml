@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataflow-pcb-inspection"
+version = "0.1.2"
+description = "PCB inspection operators, prompts and pipelines for DataFlow"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+dependencies = ["open-dataflow==1.0.11", "numpy>=1.26,<2", "pandas>=2.2,<3", "Pillow>=10,<13", "jsonschema>=4.23,<5"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "build>=1.2,<2"]
+
+[tool.setuptools.packages.find]
+include = ["dataflow_pcb_inspection*"]
+
+[tool.setuptools.package-data]
+dataflow_pcb_inspection = ["data/**/*", "data/*"]
+
+[tool.pytest.ini_options]
+addopts = "--basetemp=.pytest-tmp"
+testpaths = ["test"]
+markers = ["cpu: offline tests requiring no model API or GPU", "media: FFmpeg and Parquet integration"]

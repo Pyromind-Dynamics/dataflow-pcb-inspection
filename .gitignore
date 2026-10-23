@@ -1,0 +1,15 @@
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+artifacts/
+.coverage
+logs/
+.pytest-tmp/
+.DS_Store
+
+# Local source case for demo production; not extension source code.
+/pcb-caseori/

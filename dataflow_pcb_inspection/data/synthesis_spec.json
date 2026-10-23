@@ -1,0 +1,20 @@
+{
+  "id": "synthetic-1",
+  "category": "scratch",
+  "source_split": "train",
+  "target_split": "train",
+  "source_image": "donor.png",
+  "source_reference": "normal.png",
+  "source_mask": "mask.png",
+  "target_image": "normal.png",
+  "candidate_mask": "allowed.png",
+  "allowed_mask": "allowed.png",
+  "seed": 7,
+  "acceptance": {
+    "min_area": 1,
+    "max_area": 40,
+    "max_clip_fraction": 0,
+    "visibility_threshold": 1,
+    "min_visible_pixels": 1
+  }
+}

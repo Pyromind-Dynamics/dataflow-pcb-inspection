@@ -1,0 +1,23 @@
+name: test
+on: [push, pull_request]
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -v
+      - run: python -m build
+      - name: Verify wheel outside source tree
+        run: |
+          python -m venv /tmp/wheel-check
+          /tmp/wheel-check/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/wheel-check/bin/python -m dataflow_pcb_inspection.pipelines.demo --output /tmp/extension-demo

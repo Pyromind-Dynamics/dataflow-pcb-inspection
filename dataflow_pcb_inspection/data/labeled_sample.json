@@ -1,0 +1,33 @@
+{
+  "id": "synthetic-labeled-pcb",
+  "inspection_rules": "Artificial fixture only; no customer standard.",
+  "images": [
+    {
+      "id": "target",
+      "role": "inspection",
+      "path": "donor.png"
+    },
+    {
+      "id": "reference",
+      "role": "reference",
+      "path": "normal.png"
+    }
+  ],
+  "original_annotations": {
+    "verdict": "defect",
+    "findings": [
+      {
+        "image_id": "target",
+        "category": "scratch",
+        "bbox_xyxy": [
+          5,
+          3,
+          8,
+          7
+        ],
+        "note": "Known synthetic fixture rectangle"
+      }
+    ],
+    "note": "Existing synthetic fixture label; no model prediction"
+  }
+}

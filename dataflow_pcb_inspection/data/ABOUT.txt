@@ -1,0 +1,3 @@
+Examples are artificial fixtures. No private business dataset is included.
+
+labeled_sample.json provides an existing synthetic scratch label for the packaged model-free conversion example. No external dataset or model output is included in that example.
