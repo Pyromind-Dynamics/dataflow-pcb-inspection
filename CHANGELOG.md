@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Reuse each CI job's tested dependency versions for the fresh wheel installation; upgrade pip in both isolated environments.
+- Verify dependency consistency with pip check and run the installed wheel outside the source tree in Python isolated mode.
+- Release the source environment before installing the wheel to limit Linux runner disk usage; bound job duration and retain resolved constraints as CI artifacts.
+
 ## 0.1.2
 
 - Add operator-specific bilingual descriptions including actual parameter defaults and field contracts.
