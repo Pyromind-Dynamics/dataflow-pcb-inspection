@@ -1,101 +1,134 @@
 # dataflow-pcb-inspection
 
-独立维护的 DataFlow PCB 扩展，当前实现版本为 **0.1.2**。它可以整理已有缺陷框并转换为 Label Studio 文件；也提供可选的多图模型预标注、人工复核和标注模板合成功能。
+面向 PCB 缺陷数据整理与标注的 [DataFlow](https://github.com/OpenDCAI/DataFlow) 扩展。把 PCB 图片、已有缺陷框和复核结果串成可重复运行的数据处理流程，输出 Label Studio 标注文件或带来源记录的合成样本。
 
-安装后通过 `import dataflow_pcb_inspection` 注册算子和 Prompt，与 DataFlow 的 Storage、Serving、Pipeline 组合使用。无需把源码复制进 DataFlow 主仓。
+## 适用场景
 
-本文展示的主流程是：**已有像素坐标框 → 标签核对 → Label Studio 文件**。模型预标注和模板合成是独立的可选流程。
+- **已有图片和缺陷坐标，需要转换标注格式**：核对已有标签，把原图像素坐标转换成 Label Studio 使用的百分比坐标，供后续查看和复核。
+- **需要模型辅助标注**：把待检图、参考图和检查规则交给多图模型，得到缺陷类别和位置，再交由人工确认。
+- **需要补充缺陷样本**：利用已有缺陷图片和掩码进行几何变换与模板合成，输出图片、掩码、缺陷框和来源记录。
 
-## WebUI 运行与处理前后对比
+| 功能 | 输入 | 输出 | 是否需要模型 |
+|---|---|---|---|
+| 已有标注转换 | PCB 图片、缺陷类别、像素坐标框 | Label Studio 任务 JSON、标签配置 XML | 否 |
+| 模型预标注 | 待检图、参考图、检查规则 | 缺陷建议、位置和待复核记录 | 是，需配置多图 Serving |
+| 人工复核结果合并 | 原始标注记录、人工决策或 Label Studio 导出文件 | 保留原标签及修改来源的复核结果 | 否 |
+| 模板合成 | 已标注缺陷、目标图片、掩码和变换参数 | 合成图片、掩码、坐标框及来源信息 | 否 |
 
-已通过官方 DataFlow-WebUI 的 **Save & Run → Ray** 执行标签核对与 Label Studio 导出，未添加自定义界面或接口。示例处理 2 条已有标注、共 17 个框，转换后的百分比坐标还原后与输入像素框一致；此流程不调用模型，也不代表模型检测结果。截图中的本机文件路径已遮挡。
-
-![官方 WebUI 中实际执行 PCB 扩展](docs/assets/pcb-webui.png)
-
-下面的对比图直接列出实际输入的像素框和输出的 Label Studio 百分比字段；原图也保留，并显示转换前后的框，编号对应同一条标注。
-
-![PCB 标签转换前后对比](docs/assets/pcb-before-after.png)
-
-对比图中的 PCB 图像来自公开 DeepPCB 样本；来源和数据集使用范围见 [第三方来源说明](THIRD_PARTY_NOTICES.md)。WebUI 加载方式是在后端安装本包、将 `dataflow_pcb_inspection` 加入 `_DATAFLOW_EXTENSIONS` 并重启；图片等外部文件须可被后端访问。多图预标注需要另行配置兼容的 DataFlow Serving，本次 WebUI 示例没有执行模型调用。
-
-## 算子契约与字段安全
-
-每个公开算子的 `get_desc("zh")` / `get_desc("en")` 包含初始化参数、实际默认字段、结果结构和错误行为。`run` 新增结果列并保留输入行数、顺序和源列；**输出列必须尚不存在**，已有同名列时在处理前报错，请换一个 `output_key`。旧代码若依赖覆盖列，需要显式改用新列。
-
-`Pipeline.compile()` 检查表格字段依赖；来源字典的内部字段、文件是否存在和媒体内容在运行时检查。编译成功不代表这些外部资源已经通过校验。
+已有标注转换由 Python 代码完成坐标换算和文件整理；它保留已有缺陷信息，不执行缺陷识别。模型预标注与模板合成的结果需要人工复核后再用于业务数据。
 
 ## 安装
 
-在扩展仓库目录内使用 Python 3.10–3.12 安装：
+需要 Python 3.10–3.12，依赖 `open-dataflow==1.0.11`。
 
 ```bash
+git clone https://github.com/Pyromind-Dynamics/dataflow-pcb-inspection.git
+cd dataflow-pcb-inspection
 python -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install .
 ```
 
-## 已有标注转换：不调用模型
+## 快速开始：转换已有标注
 
-安装后运行包内人工构造的已标注图片示例：
+包内提供了一组示例图片和一个已有缺陷框，无需模型或 API key 即可运行：
 
 ```bash
 python -m dataflow_pcb_inspection.pipelines.labels_demo --output artifacts/labels-demo
 ```
 
-使用新的输出目录。示例通过真实 DataFlow Pipeline 执行“已有像素标注 → 标签核对 → Label Studio 任务”，输出 `label_studio_tasks.json`、`label_config.xml`、分步 JSONL 和 `summary.json`。预期 1 条记录、1 个框，`relation=keep`、`model_called=false`。它展示格式转换，不生成新标注，也不模拟真人审核。接入自己的已有标注时，按 [数据契约](docs/CONTRACT.md) 准备 sample、prediction 和版本绑定，并复用 `LabelConversionPipeline`。
+示例通过 DataFlow Pipeline 完成：
 
-## 本地离线示例与开发验证
-
-离线示例使用包内示范素材和固定响应，不调用模型或需要 API key；输出中的 `simulated_review.json` 明确标记为模拟审核，不代表真人已复核。输出目录必须尚不存在。
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-python -m dataflow_pcb_inspection.pipelines.demo --output artifacts/my-demo
-python -m pytest -q
+```text
+图片和已有像素框 → 标签核对 → Label Studio 格式转换 → 保存文件
 ```
 
-依赖固定 `open-dataflow==1.0.11`。本机验证结果和未覆盖的平台见 [验证说明](docs/VALIDATION.md)；`requirements-macos-py312.txt` 是 macOS arm64 本地环境锁定文件，不用于 Linux。
+结果保存在 `artifacts/labels-demo/`：
 
-## 输入与示例产物
+| 文件 | 内容 |
+|---|---|
+| `input.jsonl` | 本次处理的图片引用和已有标注 |
+| `label_studio_tasks.json` | 可导入 Label Studio 的任务文件，包含转换后的坐标 |
+| `label_config.xml` | 对应的 Label Studio 标签配置 |
+| `steps/labels_step1.jsonl`、`steps/labels_step2.jsonl` | 标签核对结果和转换结果 |
+| `summary.json` | 处理数量、框数量和是否调用模型 |
 
-预标注 Pipeline 的输入是 JSONL，每行含 `sample`。例如：
+本例处理 1 条记录、1 个框，汇总结果中 `relation` 为 `keep`、`model_called` 为 `false`。再次运行请使用新的输出目录。
+
+使用自己的数据时，按 [输入格式与接口说明](docs/CONTRACT.md) 准备包含图片、已有标注和版本绑定信息的记录，再复用 `pipelines.labels_demo.LabelConversionPipeline`。在 Label Studio 中查看图片，还需要把任务中的图片路径映射为该服务可访问的媒体地址。
+
+## 实际案例：PCB 标注格式转换
+
+下面使用 DeepPCB 图片及其已有标注演示转换过程，共处理 **2 条记录、17 个缺陷框**。
+
+- **处理前**：PCB 原图，以及用像素坐标描述的缺陷类别和位置。
+- **处理过程**：核对标签，将像素坐标转换成 Label Studio 的百分比字段。
+- **处理后**：Label Studio 任务 JSON 和标签配置。输出坐标还原为像素后与输入框一致。
+
+这条流程不调用模型。图中的原图、缺陷框和 JSON 字段共同展示同一批数据在转换前后的对应关系。
+
+![PCB 已有标注转换前后：原图、像素坐标与 Label Studio 字段](docs/assets/pcb-before-after.png)
+
+### 在 DataFlow-WebUI 中运行该案例
+
+同一处理流程也可以在官方 [DataFlow-WebUI](https://github.com/OpenDCAI/DataFlow-WebUI) 中配置和执行。下图是该案例的运行界面，使用标签核对和 Label Studio 导出节点：
+
+![PCB 标注转换案例在官方 DataFlow-WebUI 中的运行界面](docs/assets/pcb-webui.png)
+
+接入方式：
+
+1. 在 WebUI 后端及其 Ray worker 使用的 Python 环境中安装本扩展。
+2. 在后端 `backend/app/core/config.py` 的 `_DATAFLOW_EXTENSIONS` 列表中加入 `"dataflow_pcb_inspection"`，保留已有条目并重启后端。
+3. 选择输入数据，连接 `PCBLabelReconciler` 和 `PCBLabelStudioExporter`，配置字段并点击 **Save & Run**。
+
+输入图片须能被执行后端访问。处理记录由 DataFlow Storage 保存到配置的输出位置；上述快速开始脚本还会把任务 JSON 和 XML 整理为独立文件，便于导入 Label Studio。
+
+## 其他用法
+
+### 模型预标注与复核
+
+预标注输入是 JSONL，每行包含一个 `sample`，例如：
 
 ```json
-{"sample":{"id":"pcb-001","inspection_rules":"按提供的缺陷类别检查待检图，输出原图像素坐标。","images":[{"id":"target","role":"inspection","path":"board.png"},{"id":"reference","role":"reference","path":"reference.png"}]}}
+{"sample":{"id":"pcb-001","inspection_rules":"检查待检图中的缺陷，输出类别和原图像素坐标。","images":[{"id":"target","role":"inspection","path":"board.png"},{"id":"reference","role":"reference","path":"reference.png"}]}}
 ```
 
-图片路径相对调用时指定的 `image_root`，图片 ID 在同一样本中唯一。输出框为对应待检图的原图像素 `bbox_xyxy`，参考图用于对照。详细 schema、类别配置及约束见 [数据契约](docs/CONTRACT.md)。
+图片路径相对 `image_root`。调用 `PCBMultiImageAnnotationGenerator` 时传入支持 `generate_from_input_multi_images` 的 DataFlow Serving；输出包含缺陷类别、对应图片和 `bbox_xyxy` 坐标框。结果保持待复核状态，可通过复核算子或 Label Studio 文件导入导出完成后续处理。具体参数和记录格式见 [接口说明](docs/CONTRACT.md)。
 
-上面的离线示例会产生：
+### 体验预标注、复核与合成的数据流
 
-| 文件 | 用途 |
-|---|---|
-| `steps/pcb_step1.jsonl` | 保留源列的预测与逐条失败信息 |
-| `label_studio_tasks.json`、`label_config.xml` | Label Studio 待复核任务及标签配置 |
-| `simulated_review.json` | 格式往返示范，明确标记模拟审核 |
-| `synthesis/` | 合成候选及关联图片、掩码等产物 |
-| `summary.json` | 输入数、待复核数、失败数及示例状态 |
+```bash
+python -m dataflow_pcb_inspection.pipelines.demo --output artifacts/full-demo
+```
 
-这些路径相对 `--output` 目录。正常图片预测也保持待复核状态；失败记录不会伪装成正常标签。
+这个独立示例使用固定的模型响应和模拟复核决策，演示完整文件流转，不调用真实模型。输出包括分步 JSONL、Label Studio 文件、`simulated_review.json`、`synthesis/` 和 `summary.json`，均位于指定的新输出目录。
 
-扩展安装后通过 `import dataflow_pcb_inspection` 注册算子和 Prompt。模型预标注算子要求 Serving 实现 `generate_from_input_multi_images`；仅继承 `LLMServingABC` 不足以证明兼容。标签导入导出在本地处理文件，不调用 Label Studio 在线 API。
+## 算子与 DataFlow 接口
+
+安装后执行 `import dataflow_pcb_inspection` 即可注册算子和 Prompt。
 
 | 算子 | 作用 |
 |---|---|
-| PCBMultiImageAnnotationGenerator | 多图预测与输入/响应校验 |
-| PCBLabelReconciler | 核对原标签和模型建议，保留冲突 |
-| PCBReviewExporter / PCBReviewDecisionMerger | 待复核文件与绑定版本的人工决策合并 |
-| PCBLabelStudioExporter / PCBLabelStudioImporter | 本地文件转换，不调用 Label Studio API |
-| PCBTemplateSynthesisGenerator | 真实标注模板几何合成与产物来源记录 |
+| `PCBMultiImageAnnotationGenerator` | 多图模型预标注 |
+| `PCBLabelReconciler` | 核对原标签与候选标签，记录一致或冲突 |
+| `PCBReviewExporter` / `PCBReviewDecisionMerger` | 导出复核记录、合并人工决策 |
+| `PCBLabelStudioExporter` / `PCBLabelStudioImporter` | 转换本地 Label Studio 文件 |
+| `PCBTemplateSynthesisGenerator` | 基于已有标注进行模板合成 |
 
-所有算子通过 `run(storage, input_key=..., output_key=...)` 接入，保留输入列。具体构造参数与字段见 [CONTRACT.md](docs/CONTRACT.md)。预标注默认 isolate，把异常记录为 failed；复核和文件转换遇到契约不匹配时抛错。处理复核子集时应先选出成功的 needs_review 记录。
+算子通过 `run(storage, input_key=..., output_key=...)` 接入 DataFlow，保留输入行和源列，并新增结果列；`output_key` 必须是尚不存在的列。使用 `get_desc("zh")` 或 `get_desc("en")` 可查看各算子的参数和字段说明。
 
-## 范围与维护
+当前支持本地 JPEG/PNG 和未旋转矩形框；Label Studio 集成采用文件导入导出方式。完整数据约束、错误处理及合成参数见 [CONTRACT.md](docs/CONTRACT.md)。
 
-- 支持本地 JPEG/PNG、多张同角色图片和原图像素 bbox，不依赖 Pyromind/Agent 服务。
-- 模板合成基于已有标注做几何变换，生成结果需人工检查；模型预标注结果也保持待复核状态，不自动成为训练标签。
-- 首期 Label Studio 支持未旋转矩形、判定单选和说明文本，不支持复杂形状或在线服务集成。
-- 当前没有通用续跑、失败补跑、HTTP API、TS SDK 或复核界面。
-- 项目代码采用 MIT 许可证，第三方代码及演示素材的来源和限制见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+## 开发与文档
+
+```bash
+python -m pip install -e '.[dev]'
+python -m pytest -q
+```
+
+- [输入格式、算子参数与处理约束](docs/CONTRACT.md)
+- [验证记录](docs/VALIDATION.md)
+- [更新记录](CHANGELOG.md)
+
+代码采用 [MIT 许可证](LICENSE)。上述案例图片来自 DeepPCB，数据集使用范围及其他第三方来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
